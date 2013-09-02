@@ -1,0 +1,340 @@
+<head>
+	<script src="jquery-1.7.2.min.js" type="text/javascript"></script>
+	<script>
+		$(document).ready(function() {
+			$('#A1').click(function(){
+				cell_action('A1');
+			});
+			$('#A2').click(function(){
+				cell_action('A2');
+			});
+			$('#A3').click(function(){
+				cell_action('A3');
+			});
+			$('#B1').click(function(){
+				cell_action('B1');
+			});
+			$('#B2').click(function(){
+				cell_action('B2');
+			});
+			$('#B3').click(function(){
+				cell_action('B3');
+			});
+			$('#C1').click(function(){
+				cell_action('C1');
+			});
+			$('#C2').click(function(){
+				cell_action('C2');
+			});
+			$('#C3').click(function(){
+				cell_action('C3');
+			});
+			
+			var player_turn = 'X'; // X or O
+			var entaglement_turn = 1; //1 or 2
+			var game_round = 1; //int increase from 1
+			var storage_array = new Array();
+			storage_array['A1'] = new Array();
+			storage_array['A2'] = new Array();
+			storage_array['A3'] = new Array();
+			storage_array['B1'] = new Array();
+			storage_array['B2'] = new Array();
+			storage_array['B3'] = new Array();
+			storage_array['C1'] = new Array();
+			storage_array['C2'] = new Array();
+			storage_array['C3'] = new Array();
+			
+			var encountered_nodes = new Array();
+			var collapse_option_cells = new Array();
+			var collapse_pending = false;
+			var previous_node = '';
+			var game_over = false;
+			function cell_action(cell){
+				if(!game_over){
+				//Check if collapse due
+				if(collapse_pending){
+					//check if cell is candidate
+					if($.inArray(cell, collapse_option_cells) >= 0){
+						follow_entaglements_and_collapse(cell, previous_node);
+						collapse_pending = false;
+						collapse_option_cells = '';
+						collapse_option_cells = new Array();
+						//undo grey out
+						ungrey();
+						winner_is = detect_winner();
+						if(winner_is){
+							declare_winner(winner_is);
+						}
+					}
+				}else{
+					//check if cell is has been collapsed
+					if($.isArray(storage_array[cell])){
+						//entagle cell
+						entangle(cell);
+					}
+				}
+				update_display_info();
+				}
+			}
+
+			function entangle(cell){
+				//prevent 2 nodes of same type in one cell
+				if($.inArray(player_turn + game_round, storage_array[cell]) < 0){
+					//get current value of cell
+					value = $('#'+cell).html() ? $('#'+cell).html() : '';
+					//add new value to current value in cell
+					$('#'+cell).html(value + ' ' + player_turn + game_round);
+					storage_array[cell].push(player_turn + game_round);
+					if(entaglement_turn == 1){
+						entaglement_turn = 2;
+					}else{
+						//Check for cyclic entaglement
+						if(cyclic_entanglement_check(cell, player_turn + game_round)){
+							//set pending collapse
+							collapse_pending = true;
+							//offer collapse options
+							offer_collapse(player_turn + game_round);
+						}
+						//clear encountered_nodes
+						previous_node = player_turn + game_round;
+						encountered_nodes = '';
+						encountered_nodes = new Array();
+						//update data for next turn
+						entaglement_turn = 1;
+						if(player_turn == 'X'){
+							player_turn = 'O';
+						}else{
+							player_turn = 'X';
+						}
+						game_round++;
+						
+					}
+				}
+			}
+			
+			function offer_collapse(node){
+				//search for cells with current node
+				for(var any_cell in storage_array) {
+					if($.inArray(node, storage_array[any_cell]) >= 0){
+						collapse_option_cells.push(any_cell);
+					}else{
+						$('#'+any_cell).css("background", "gray");
+					}
+				}
+			}
+			
+			function follow_entaglements_and_collapse(collapse_cell, collapse_node){
+				//Cache current cell nodes
+				var temp_storage = storage_array[collapse_cell];
+				//collapse cell for node
+				collapse(collapse_cell, collapse_node);
+				//for each node in temp storage..
+				for (var j = 0; j < temp_storage.length; j++) {
+					//that is not collapse node or previous_node...
+					if(temp_storage[j] != collapse_node && temp_storage[j] != previous_node){
+						//look for the other cell...
+						for(var pair_collapse_cell in storage_array) {
+							//that have not been collapsed...
+							if($.isArray(storage_array[pair_collapse_cell])){
+								//that contains the pair node
+								if($.inArray(temp_storage[j], storage_array[pair_collapse_cell]) >= 0){
+									//run collapse with pair node and pair cell
+									follow_entaglements_and_collapse(pair_collapse_cell, temp_storage[j]);
+								}
+							}
+							
+						}
+					}
+				}				
+			}
+			
+			function collapse(collapsing_cell, collapsing_node){
+				node_type = collapsing_node.substring(0,1);
+				//change value to collapsing_node type ie, X or O in cell
+				$('#'+collapsing_cell).html(node_type);
+				$('#'+collapsing_cell).css("font-size","500%");
+				$('#'+collapsing_cell).css("text-align","center");
+				storage_array[collapsing_cell] = node_type;
+				//TODO: handle storing big X or O better
+			}
+			
+			function update_display_info(){
+				$('#player_turn').html(player_turn);
+			}
+			
+			function cyclic_entanglement_check(cell, node){
+				if($.inArray(node, encountered_nodes) >= 0){
+					return true;
+				}
+				//assume no cyclic entaglement until one is found
+				var success = false;
+				//add to list of encountered
+				encountered_nodes.push(node);
+				//search for pair in other cells
+				var pair_cell = false;
+				for(var other_cell in storage_array) {
+					//don't look in this cell
+					if(other_cell == cell){ 
+						continue;
+					};
+					if($.inArray(node, storage_array[other_cell]) >= 0){
+						pair_cell = other_cell;
+					}
+				}
+				if(pair_cell){
+					//search cell for other nodes
+					for (var i = 0; i < storage_array[pair_cell].length; i++) {
+						//don't count the matching value
+						if(storage_array[pair_cell][i] == node){
+							continue;
+						}
+						//run check on nodes
+						if(cyclic_entanglement_check(pair_cell, storage_array[pair_cell][i])){
+							success = true;
+						};
+					}
+					
+					
+				}
+				return success;
+			}
+			
+			function ungrey(){
+				for(var grey_cell in storage_array) {
+					$('#'+grey_cell).css("background", "white");
+				}
+			};
+			
+			function detect_winner(){
+				winner = new Array();
+				//is B2 filled
+				if(!$.isArray(storage_array['B2'])){
+					//check combinations to see if they are the same as B2
+					//check A1 & C3
+					if(storage_array['B2'] == storage_array['A1'] && storage_array['B2'] == storage_array['C3']){
+						winner.push(storage_array['B2']);
+					}
+					//check A3 & C1
+					if(storage_array['B2'] == storage_array['A3'] && storage_array['B2'] == storage_array['C1']){
+						winner.push(storage_array['B2']);
+					}
+					//check A2 & C2
+					if(storage_array['B2'] == storage_array['A2'] && storage_array['B2'] == storage_array['C2']){
+						winner.push(storage_array['B2']);
+					}
+					//check B1 & B3
+					if(storage_array['B2'] == storage_array['B1'] && storage_array['B2'] == storage_array['B3']){
+						winner.push(storage_array['B2']);
+					}
+				}
+				//is A2 filled
+				if(!$.isArray(storage_array['A2'])){
+					//check A1 & A3
+					if(storage_array['A2'] == storage_array['A1'] && storage_array['A2'] == storage_array['A3']){
+						winner.push(storage_array['A2']);
+					}
+				}
+				//is C2 filled
+				if(!$.isArray(storage_array['C2'])){
+					//check C1 & C3
+					if(storage_array['C2'] == storage_array['C1'] && storage_array['C2'] == storage_array['C3']){
+						winner.push(storage_array['C2']);
+					}
+				}
+				//is B1 filled
+				if(!$.isArray(storage_array['B1'])){
+					//check A1 & C1
+					if(storage_array['B1'] == storage_array['A1'] && storage_array['B1'] == storage_array['C1']){
+						winner.push(storage_array['B1']);
+					}
+				}
+				//is B3 filled
+				if(!$.isArray(storage_array['B3'])){
+					//check A3 & C3
+					if(storage_array['B3'] == storage_array['A3'] && storage_array['B3'] == storage_array['C3']){
+						winner.push(storage_array['B3']);
+					}
+				}
+				moves_left = 0;
+				//check if there are moves left
+				for(var a_cell in storage_array) {
+					if($.isArray(storage_array[a_cell])){
+						moves_left++;
+					}
+				}
+				
+				if(winner.length == 0){ //check for no winner
+					if(moves_left > 1){
+						return false;
+					}else{
+						return 'draw';
+					}
+				}else if(winner.length == 1){ //check for clear winner
+					return winner[0];
+				}else{ //check for possible draw
+					//cache first winner to compare others with
+					first_winner = winner[0];
+					//draw assumed false
+					draw = false;
+					for (var k = 0; k < winner.length; k++){
+						//if other winners are different to first winner there is a draw.
+						if(winner[k] != first_winner){
+							draw = true;
+						}
+					}
+					if(draw){
+						return 'draw';
+					}else{
+						return first_winner;
+					}
+				}
+			}
+			
+			
+			function declare_winner(winner_name){
+				if(winner_name == 'draw'){
+					$('#heading').html('GAME ENDED IN DRAW');
+				}else{
+					$('#heading').html(winner_name+' WON THE GAME');
+				}
+				game_over = true;
+				$('#play_again').show()
+			}
+			
+			$('#refresh').click(function() {
+				location.reload();
+			});
+			
+		});
+	</script>
+</head>
+<body>
+	<h1 id="heading"><span id = "player_turn">X</span>'S TURN</h1>
+	<table id = "board" border="1" width=300 height=300>
+		<tr>
+			<td id = "A1" width=33% height=33%>
+			</td>
+			<td id = "B1" width=33% height=33%>
+			</td>
+			<td id = "C1" width=33% height=33%>
+			</td>
+		</tr>
+		<tr>
+			<td id = "A2" width=33% height=33%>
+			</td>
+			<td id = "B2" width=33% height=33%>
+			</td>
+			<td id = "C2" width=33% height=33%>
+			</td>
+		</tr>
+		<tr>
+			<td id = "A3" width=33% height=33%>
+			</td>
+			<td id = "B3" width=33% height=33%>
+			</td>
+			<td id = "C3" width=33% height=33%>
+			</td>
+		</tr>
+	</table>
+	<div id="play_again" style="display:none;"><button id="refresh">Play Again</button></div>
+</body>
